@@ -53,7 +53,7 @@ def get_conversational_chain():
     """
     
     model = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",  # Changed from gemini-1.5-pro
+        model="gemini-2.5-flash",  
         temperature=0.3
     )
     
