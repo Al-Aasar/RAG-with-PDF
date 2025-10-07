@@ -2,7 +2,7 @@ import streamlit as st
 from PyPDF2 import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import os
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 import google.generativeai as genai
 from langchain.vectorstores import FAISS
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -25,15 +25,18 @@ def get_pdf_text(pdf_docs):
 
 def get_text_chunks(text):
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=10000, 
-        chunk_overlap=1000
+        chunk_size=1000, 
+        chunk_overlap=200
     )
     chunks = text_splitter.split_text(text)
     return chunks
 
 
 def get_vector_store(text_chunks):
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+
+    embeddings = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2"
+    )
     vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
     vector_store.save_local("faiss_index")
 
@@ -50,6 +53,7 @@ def get_conversational_chain():
     Answer:
     """
     
+
     model = ChatGoogleGenerativeAI(
         model="gemini-1.5-pro",
         temperature=0.3
@@ -65,7 +69,10 @@ def get_conversational_chain():
 
 
 def user_input(user_question):
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+    
+    embeddings = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2"
+    )
     
     new_db = FAISS.load_local(
         "faiss_index", 
@@ -87,12 +94,12 @@ def user_input(user_question):
 
 def main():
     st.set_page_config(
-        page_title="PDF Chat with Gemini",
+        page_title="PDF Chat with AI",
         page_icon="📄",
         layout="wide"
     )
     
-    st.header("📄 Chat With Your PDFs ")
+    st.header("📄 Chat with PDF using AI")
     st.write("Upload your PDF files and ask questions about their content!")
     
 
@@ -106,7 +113,7 @@ def main():
         
         if st.button("Process PDFs"):
             if pdf_docs:
-                with st.spinner("Processing your PDFs..."):
+                with st.spinner("Processing your PDFs... This may take a moment."):
                     raw_text = get_pdf_text(pdf_docs)
                     text_chunks = get_text_chunks(raw_text)
                     get_vector_store(text_chunks)
@@ -133,6 +140,8 @@ def main():
         2. Click 'Process PDFs' button to analyze the documents
         3. Ask any question about the content of your PDFs
         4. Get AI-powered answers based on the document context
+        
+        **Note:** This app uses HuggingFace embeddings for text processing and Google Gemini for generating answers.
         """)
 
 if __name__ == "__main__":
