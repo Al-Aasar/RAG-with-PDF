@@ -33,18 +33,25 @@ Upload PDF files and ask any question about their content. The AI will read the 
 ## How to Run Locally
 
 1. Clone the repository:
-   git colne https://github.com/Al-Aasar/RAG-with-PDF.git
+   ```bash
+   git clone https://github.com/Al-Aasar/RAG-with-PDF.git
    cd rag-with-pdf
+   ```
 
 2. Install requirements:
+   ```bash
    pip install -r requirements.txt
+   ```
 
 3. Add your Google API key in `.streamlit/secrets.toml`:
+   ```toml
    GOOGLE_API_KEY = "your-api-key-here"
+   ```
 
 4. Run the app:
+   ```bash
    streamlit run app.py
-
+   ```
 
 ---
 
@@ -59,9 +66,11 @@ Upload PDF files and ask any question about their content. The AI will read the 
 
 ## Project Structure
 
-├── app.py # Main app
-├── requirements.txt # Dependencies
-└── README.md # This file
+```
+├── app.py              # Main app
+├── requirements.txt    # Dependencies
+└── README.md          # This file
+```
 
 ---
 
@@ -71,3 +80,7 @@ Upload PDF files and ask any question about their content. The AI will read the 
 🎓 B.Sc. in Computer Science, Tanta University  
 🔗 [LinkedIn Profile](https://www.linkedin.com/in/muhammad-al-aasar-455b78329)  
 📞 +20 1015088811
+
+---
+
+⭐ Give this project a star if you find it useful!
