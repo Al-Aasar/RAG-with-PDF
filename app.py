@@ -33,7 +33,6 @@ def get_text_chunks(text):
 
 
 def get_vector_store(text_chunks):
-
     embeddings = HuggingFaceEmbeddings(
         model_name="sentence-transformers/all-MiniLM-L6-v2"
     )
@@ -53,9 +52,8 @@ def get_conversational_chain():
     Answer:
     """
     
-
     model = ChatGoogleGenerativeAI(
-        model="gemini-1.5-pro",
+        model="gemini-2.5-flash",  # Changed from gemini-1.5-pro
         temperature=0.3
     )
     
@@ -69,7 +67,6 @@ def get_conversational_chain():
 
 
 def user_input(user_question):
-    
     embeddings = HuggingFaceEmbeddings(
         model_name="sentence-transformers/all-MiniLM-L6-v2"
     )
@@ -102,7 +99,6 @@ def main():
     st.header("📄 Chat with PDF using AI")
     st.write("Upload your PDF files and ask questions about their content!")
     
-
     with st.sidebar:
         st.title("📁 Upload Documents")
         pdf_docs = st.file_uploader(
@@ -121,7 +117,6 @@ def main():
             else:
                 st.warning("Please upload at least one PDF file.")
     
-
     user_question = st.text_input("Ask a question about your PDFs:")
     
     if user_question:
@@ -133,7 +128,6 @@ def main():
         else:
             st.warning("⚠️ Please upload and process PDF files first!")
     
-
     with st.expander("ℹ️ How to use"):
         st.write("""
         1. Upload one or more PDF files using the sidebar
@@ -141,7 +135,7 @@ def main():
         3. Ask any question about the content of your PDFs
         4. Get AI-powered answers based on the document context
         
-        **Note:** This app uses HuggingFace embeddings for text processing and Google Gemini for generating answers.
+        **Note:** This app uses HuggingFace embeddings for text processing and Google Gemini 2.5 Flash for generating answers.
         """)
 
 if __name__ == "__main__":
