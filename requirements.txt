@@ -5,3 +5,4 @@ langchain-google-genai
 PyPDF2
 faiss-cpu
 langchain-community
+sentence-transformers
