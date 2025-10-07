@@ -92,7 +92,7 @@ def main():
         layout="wide"
     )
     
-    st.header("📄 Chat with PDF using Google Gemini")
+    st.header("📄 Chat With Your PDFs ")
     st.write("Upload your PDF files and ask questions about their content!")
     
 
