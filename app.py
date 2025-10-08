@@ -1,142 +1,129 @@
+import os
 import streamlit as st
 from PyPDF2 import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-import os
 from langchain_community.embeddings import HuggingFaceEmbeddings
-import google.generativeai as genai
 from langchain.vectorstores import FAISS
+import google.generativeai as genai
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 
+# --- App config ---
+st.set_page_config(page_title="PDF RAG Chat", page_icon="💬", layout="wide")
 
+# --- Secrets / API key ---
 os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
+# --- Session state init ---
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {"role": "assistant", "content": "Hi! Upload PDFs from the sidebar, click Process, then ask me anything about them."}
+    ]
 
-def get_pdf_text(pdf_docs):
+if "vector_store_ready" not in st.session_state:
+    st.session_state.vector_store_ready = False
+
+if "vs" not in st.session_state:
+    st.session_state.vs = None
+
+# --- Core helpers ---
+def extract_pdf_text(pdf_files):
     text = ""
-    for pdf in pdf_docs:
-        pdf_reader = PdfReader(pdf)
-        for page in pdf_reader.pages:
+    for pdf in pdf_files:
+        reader = PdfReader(pdf)
+        for page in reader.pages:
             text += page.extract_text()
     return text
 
+def chunk_text(text, chunk_size=1000, overlap=200):
+    splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=overlap)
+    return splitter.split_text(text)
 
-def get_text_chunks(text):
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000, 
-        chunk_overlap=200
-    )
-    chunks = text_splitter.split_text(text)
-    return chunks
+def build_vector_store(chunks):
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    vs = FAISS.from_texts(chunks, embedding=embeddings)
+    return vs
 
-
-def get_vector_store(text_chunks):
-    embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2"
-    )
-    vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
-    vector_store.save_local("faiss_index")
-
-
-def get_conversational_chain():
+def qa_chain():
     prompt_template = """
-    Answer the question as detailed as possible from the provided context. 
-    Make sure to provide all the details. If the answer is not in the provided context, 
-    just say "The answer is not available in the context", don't provide wrong answers.
-    
-    Context:\n{context}\n
-    Question:\n{question}\n
-    
+    You are a helpful assistant answering strictly from the provided context.
+    If the answer is not in the context, say: "The answer is not available in the context."
+
+    Context:
+    {context}
+
+    Question:
+    {question}
+
     Answer:
     """
-    
-    model = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",  
-        temperature=0.3
-    )
-    
-    prompt = PromptTemplate(
-        template=prompt_template, 
-        input_variables=["context", "question"]
-    )
-    
-    chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.3)
+    prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
+    chain = load_qa_chain(llm, chain_type="stuff", prompt=prompt)
     return chain
 
+def answer_question(question, k=4):
+    # Retrieve relevant docs
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    docs = st.session_state.vs.similarity_search(question, k=k)
+    # Run QA chain
+    chain = qa_chain()
+    out = chain({"input_documents": docs, "question": question}, return_only_outputs=True)
+    return out["output_text"]
 
-def user_input(user_question):
-    embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2"
-    )
-    
-    new_db = FAISS.load_local(
-        "faiss_index", 
-        embeddings, 
-        allow_dangerous_deserialization=True
-    )
-    
-    docs = new_db.similarity_search(user_question)
-    
-    chain = get_conversational_chain()
-    
-    response = chain(
-        {"input_documents": docs, "question": user_question},
-        return_only_outputs=True
-    )
-    
-    return response["output_text"]
-
-
-def main():
-    st.set_page_config(
-        page_title="PDF Chat with AI",
-        page_icon="📄",
-        layout="wide"
-    )
-    
-    st.header("📄 Chat with PDF using AI")
-    st.write("Upload your PDF files and ask questions about their content!")
-    
-    with st.sidebar:
-        st.title("📁 Upload Documents")
-        pdf_docs = st.file_uploader(
-            "Upload PDF Files", 
-            accept_multiple_files=True,
-            type=['pdf']
-        )
-        
-        if st.button("Process PDFs"):
-            if pdf_docs:
-                with st.spinner("Processing your PDFs... This may take a moment."):
-                    raw_text = get_pdf_text(pdf_docs)
-                    text_chunks = get_text_chunks(raw_text)
-                    get_vector_store(text_chunks)
-                    st.success("✅ PDFs processed successfully! You can now ask questions.")
-            else:
-                st.warning("Please upload at least one PDF file.")
-    
-    user_question = st.text_input("Ask a question about your PDFs:")
-    
-    if user_question:
-        if os.path.exists("faiss_index"):
-            with st.spinner("Generating answer..."):
-                response = user_input(user_question)
-                st.write("### Answer:")
-                st.write(response)
+# --- Sidebar: documents + controls ---
+with st.sidebar:
+    st.title("📁 Documents")
+    pdfs = st.file_uploader("Upload PDF files", type=["pdf"], accept_multiple_files=True)
+    if st.button("Process PDFs", use_container_width=True):
+        if not pdfs:
+            st.warning("Please upload at least one PDF.")
         else:
-            st.warning("⚠️ Please upload and process PDF files first!")
-    
-    with st.expander("ℹ️ How to use"):
-        st.write("""
-        1. Upload one or more PDF files using the sidebar
-        2. Click 'Process PDFs' button to analyze the documents
-        3. Ask any question about the content of your PDFs
-        4. Get AI-powered answers based on the document context
-        
-        **Note:** This app uses HuggingFace embeddings for text processing and Google Gemini 2.5 Flash for generating answers.
-        """)
+            with st.spinner("Reading and indexing your PDFs..."):
+                raw = extract_pdf_text(pdfs)
+                chunks = chunk_text(raw, 1000, 200)
+                st.session_state.vs = build_vector_store(chunks)
+                st.session_state.vector_store_ready = True
+            st.success("✅ Ready! Start chatting from the box below.")
+    st.divider()
+    if st.button("Clear chat", type="secondary", use_container_width=True):
+        st.session_state.messages = [
+            {"role": "assistant", "content": "Chat cleared. Ask anything about your processed PDFs."}
+        ]
+    if st.button("Reset index", type="secondary", use_container_width=True):
+        st.session_state.vs = None
+        st.session_state.vector_store_ready = False
+        st.success("Index cleared. Re-upload and process PDFs to chat again.")
 
-if __name__ == "__main__":
-    main()
+# --- Chat history render ---
+st.header("💬 Chat with your PDFs")
+for m in st.session_state.messages:
+    with st.chat_message(m["role"]):
+        st.markdown(m["content"])
+
+# --- Chat input ---
+prompt = st.chat_input("Ask about your PDFs...")
+if prompt:
+    # Show user message
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    # Guard: index ready?
+    if not st.session_state.vector_store_ready or st.session_state.vs is None:
+        msg = "Please upload PDFs and click 'Process PDFs' first."
+        with st.chat_message("assistant"):
+            st.markdown(msg)
+        st.session_state.messages.append({"role": "assistant", "content": msg})
+    else:
+        # Get answer
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                try:
+                    response = answer_question(prompt, k=4)
+                except Exception as e:
+                    response = f"Sorry, something went wrong: {str(e)}"
+                st.markdown(response)
+        st.session_state.messages.append({"role": "assistant", "content": response})
